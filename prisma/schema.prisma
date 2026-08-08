@@ -1,0 +1,502 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AuthProvider {
+  LOCAL
+  GOOGLE
+}
+
+enum IncomeSource {
+  SALARY
+  FREELANCE
+  BONUS
+  INVESTMENT
+  RENTAL
+  OTHER
+}
+
+enum PaymentMethod {
+  CASH
+  CREDIT_CARD
+  DEBIT_CARD
+  BANK_TRANSFER
+  DIGITAL_WALLET
+}
+
+enum DebtDirection {
+  /// I owe this money to someone else
+  OWED_BY_ME
+  /// Someone owes this money to me
+  OWED_TO_ME
+}
+
+enum DebtType {
+  PERSONAL_LOAN
+  CAR_LOAN
+  HOME_LOAN
+  CREDIT_CARD
+  INSTALLMENT
+  BNPL
+  OTHER
+}
+
+enum Frequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+  YEARLY
+}
+
+enum AssetType {
+  GOLD
+  SILVER
+  CASH
+  OTHER
+}
+
+enum JobType {
+  FULL_TIME
+  PART_TIME
+  FREELANCE
+  CONTRACT
+  OTHER
+}
+
+enum DriveType {
+  COMMUTE
+  PERSONAL
+  ODOMETER_READING
+}
+
+model User {
+  id                  String       @id @default(cuid())
+  email               String       @unique
+  passwordHash        String?
+  name                String
+  provider            AuthProvider @default(LOCAL)
+  providerId          String?
+  emailVerifiedAt     DateTime?
+  verifyToken         String?      @unique
+  resetToken          String?      @unique
+  resetTokenExpiresAt DateTime?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  settings          Settings?
+  categories        Category[]
+  incomes           Income[]
+  expenses          Expense[]
+  debts             Debt[]
+  installments      Installment[]
+  recurringPayments RecurringPayment[]
+  budgets           Budget[]
+  savingsAssets     SavingsAsset[]
+  jobs              Job[]
+  aiIntegration     AiIntegration?
+  aiConversations   AiConversation[]
+  vehicles          Vehicle[]
+}
+
+model Vehicle {
+  id                  String   @id @default(cuid())
+  userId              String
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  make                String
+  model               String
+  year                Int
+  odometerKm          Decimal  @db.Decimal(12, 1)
+  dailyCommuteKm      Decimal  @default(0) @db.Decimal(8, 1)
+  /// JavaScript weekday numbers: Sunday = 0 through Saturday = 6.
+  commuteDays         Int[]    @default([])
+  autoTrackingEnabled Boolean  @default(true)
+  /// Calendar date through which scheduled commute mileage has been applied.
+  lastAutoSyncDate    DateTime @db.Date
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  drives           DriveLog[]
+  maintenanceItems MaintenanceItem[]
+
+  @@index([userId])
+}
+
+model DriveLog {
+  id              String    @id @default(cuid())
+  vehicleId       String
+  vehicle         Vehicle   @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  type            DriveType
+  date            DateTime  @db.Date
+  /// May be negative for an odometer correction.
+  distanceKm      Decimal   @db.Decimal(10, 1)
+  odometerAfterKm Decimal   @db.Decimal(12, 1)
+  notes           String?
+  createdAt       DateTime  @default(now())
+
+  @@index([vehicleId, date])
+}
+
+model MaintenanceItem {
+  id                    String   @id @default(cuid())
+  vehicleId             String
+  vehicle               Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  name                  String
+  intervalKm            Decimal  @db.Decimal(10, 1)
+  lastServiceOdometerKm Decimal  @db.Decimal(12, 1)
+  active                Boolean  @default(true)
+  notes                 String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  records MaintenanceRecord[]
+
+  @@index([vehicleId])
+}
+
+model MaintenanceRecord {
+  id         String          @id @default(cuid())
+  itemId     String
+  item       MaintenanceItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  date       DateTime        @db.Date
+  odometerKm Decimal         @db.Decimal(12, 1)
+  notes      String?
+  createdAt  DateTime        @default(now())
+
+  @@index([itemId, date])
+}
+
+/// Per-user AI chatbot integration. The provider API key is stored encrypted
+/// (AES-256-GCM) and never returned to the client.
+model AiIntegration {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// 'anthropic' | 'openai'
+  provider  String   @default("anthropic")
+  /// Model id, e.g. claude-opus-4-8 or gpt-4o
+  model     String
+  /// Encrypted API key ("iv:tag:ciphertext" base64)
+  apiKeyEnc String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// A persistent assistant thread. Financial facts are not copied here; the
+/// assistant rebuilds them from the user's live records for every reply.
+model AiConversation {
+  id        String      @id @default(cuid())
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  messages  AiMessage[]
+
+  @@index([userId, updatedAt])
+}
+
+model AiMessage {
+  id             String         @id @default(cuid())
+  conversationId String
+  conversation   AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  /// 'user' | 'assistant'
+  role           String
+  content        String
+  /// Assistant action proposals, retained so the thread renders after reload.
+  proposals      Json?
+  createdAt      DateTime       @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+model Job {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name           String
+  type           JobType  @default(FULL_TIME)
+  employer       String?
+  /// Expected pay per period. Optional for irregular work like freelance.
+  expectedAmount Decimal? @db.Decimal(12, 2)
+  /// Day of the month the salary arrives (1-31).
+  /// null = no fixed schedule (freelance) — the date is chosen per payment.
+  payDayOfMonth  Int?
+  active         Boolean  @default(true)
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  incomes Income[]
+
+  @@index([userId])
+}
+
+enum RecurringApprovalStatus {
+  PENDING
+  APPROVED
+  REMOVED
+}
+
+model RecurringApproval {
+  id                 String                  @id @default(cuid())
+  recurringPaymentId String
+  recurringPayment   RecurringPayment        @relation(fields: [recurringPaymentId], references: [id], onDelete: Cascade)
+  userId             String
+  date               DateTime
+  amount             Decimal                 @db.Decimal(12, 2)
+  status             RecurringApprovalStatus @default(PENDING)
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+
+  @@index([recurringPaymentId, status])
+  @@index([userId, status])
+}
+
+model Settings {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  currency           String   @default("USD")
+  locale             String   @default("en")
+  theme              String   @default("system")
+  dateFormat         String   @default("MM/dd/yyyy")
+  /// { enabled: bool, sections: { income, expenses, budgets, debts, dashboard, charts } }
+  privacyMode        Json     @default("{\"enabled\": false, \"sections\": {}}")
+  /// Email a monthly Excel report on `monthlyReportDay` each month.
+  monthlyReportEmail Boolean  @default(false)
+  /// Day of month (1-28) to send the report. Clamped to the last day for short months.
+  monthlyReportDay   Int      @default(27)
+  updatedAt          DateTime @updatedAt
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String
+  nameAr    String?
+  icon      String?
+  color     String?
+  isDefault Boolean  @default(false)
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  expenses          Expense[]
+  recurringPayments RecurringPayment[]
+  budgets           Budget[]
+
+  @@index([userId])
+}
+
+model Income {
+  id          String       @id @default(cuid())
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount      Decimal      @db.Decimal(12, 2)
+  date        DateTime
+  source      IncomeSource @default(OTHER)
+  /// Which job this payment came from (optional)
+  jobId       String?
+  job         Job?         @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  description String?
+  notes       String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  /// Expenses funded by this specific salary payment.
+  salaryExpenses   Expense[]     @relation("SalaryCycleExpenses")
+  installmentPlans Installment[] @relation("InstallmentSalaryCycle")
+  debtRepayment    DebtPayment?
+
+  @@index([userId, date])
+  @@index([jobId])
+}
+
+model Expense {
+  id                 String            @id @default(cuid())
+  userId             String
+  user               User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount             Decimal           @db.Decimal(12, 2)
+  date               DateTime
+  categoryId         String
+  category           Category          @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  paymentMethod      PaymentMethod     @default(CASH)
+  description        String?
+  notes              String?
+  recurringPaymentId String?
+  recurringPayment   RecurringPayment? @relation(fields: [recurringPaymentId], references: [id], onDelete: SetNull)
+  /// The actual salary payment this expense belongs to. This is independent
+  /// of the purchase date, so a salary cycle can cross calendar months.
+  salaryIncomeId     String?
+  salaryIncome       Income?           @relation("SalaryCycleExpenses", fields: [salaryIncomeId], references: [id], onDelete: SetNull)
+  /// Set when this expense was created by paying one installment.
+  installmentId      String?
+  installment        Installment?      @relation(fields: [installmentId], references: [id], onDelete: SetNull)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@index([userId, date])
+  @@index([userId, categoryId])
+  @@index([userId, salaryIncomeId])
+  @@index([userId, installmentId])
+}
+
+model Debt {
+  id             String        @id @default(cuid())
+  userId         String
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name           String
+  /// Which way the money flows: something I owe, or something owed to me.
+  direction      DebtDirection @default(OWED_BY_ME)
+  type           DebtType      @default(OTHER)
+  originalAmount Decimal       @db.Decimal(12, 2)
+  interestRate   Decimal       @default(0) @db.Decimal(5, 2)
+  /// Agreed payment per month. Null when there is no schedule — common for
+  /// money lent to a person, who simply pays back when they can.
+  monthlyPayment Decimal?      @db.Decimal(12, 2)
+  startDate      DateTime
+  dueDate        DateTime?
+  /// The other party: the lender I owe, or the person who owes me.
+  /// Kept on the original `lender` column so existing rows are preserved.
+  counterparty   String?       @map("lender")
+  notes          String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  payments DebtPayment[]
+
+  @@index([userId])
+  @@index([userId, direction])
+}
+
+model DebtPayment {
+  id             String        @id @default(cuid())
+  debtId         String
+  debt           Debt          @relation(fields: [debtId], references: [id], onDelete: Cascade)
+  amount         Decimal       @db.Decimal(12, 2)
+  date           DateTime
+  isExtra        Boolean       @default(false)
+  notes          String?
+  /// Automatically created income when this is money received from someone
+  /// who owes the user. Null for payments made toward the user's own debts.
+  incomeId       String?       @unique
+  income         Income?       @relation(fields: [incomeId], references: [id], onDelete: SetNull)
+  /// Cash savings created from a received repayment.
+  savingsAssetId String?       @unique
+  savingsAsset   SavingsAsset? @relation(fields: [savingsAssetId], references: [id], onDelete: SetNull)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([debtId, date])
+}
+
+model Installment {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name              String
+  totalPrice        Decimal  @db.Decimal(12, 2)
+  /// Paid upfront before the monthly installments started
+  downPayment       Decimal  @default(0) @db.Decimal(12, 2)
+  monthlyAmount     Decimal  @db.Decimal(12, 2)
+  totalInstallments Int
+  /// Historical paid count not represented by linked Expense rows. New
+  /// payments are derived from expenses instead of incrementing this field.
+  paidInstallments  Int      @default(0)
+  /// Salary cycle in which this installment plan was added.
+  salaryIncomeId    String?
+  salaryIncome      Income?  @relation("InstallmentSalaryCycle", fields: [salaryIncomeId], references: [id], onDelete: SetNull)
+  startDate         DateTime
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  expenses Expense[]
+
+  @@index([userId])
+  @@index([userId, salaryIncomeId])
+}
+
+model RecurringPayment {
+  id            String        @id @default(cuid())
+  userId        String
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name          String
+  amount        Decimal       @db.Decimal(12, 2)
+  categoryId    String
+  category      Category      @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  paymentMethod PaymentMethod @default(BANK_TRANSFER)
+  frequency     Frequency     @default(MONTHLY)
+  intervalCount Int           @default(1)
+  nextDueDate   DateTime
+  active        Boolean       @default(true)
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  expenses Expense[]
+
+  /// Pending materializations that require user approval before becoming expenses
+  approvals RecurringApproval[]
+
+  @@index([userId, nextDueDate])
+}
+
+model Budget {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// First day of the month this budget applies to (UTC)
+  month      DateTime
+  amount     Decimal   @db.Decimal(12, 2)
+  /// null = overall monthly budget
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@unique([userId, month, categoryId])
+  @@index([userId, month])
+}
+
+model GoldPriceSnapshot {
+  id            String   @id @default(cuid())
+  /// Date of the snapshot at UTC midnight (one row per day)
+  date          DateTime @unique
+  spotUsdPerOz  Decimal  @db.Decimal(12, 2)
+  perGram24kJod Decimal  @db.Decimal(12, 2)
+  createdAt     DateTime @default(now())
+}
+
+model SavingsAsset {
+  id             String    @id @default(cuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type           AssetType
+  name           String
+  /// GOLD/SILVER: weight of the metal
+  weightGrams    Decimal?  @db.Decimal(12, 3)
+  /// GOLD: purity in karat (24, 22, 21, 18, 14). SILVER uses purityPermille.
+  karat          Int?
+  /// GOLD: standard form/unit — RASHADI_LIRA, SOVEREIGN, BAR, JEWELLERY.
+  /// Coin forms are counted by `quantity`; weightGrams is derived from it.
+  goldForm       String?
+  /// GOLD: number of coins for counted forms (e.g. 2 Rashadi liras)
+  quantity       Int?
+  /// SILVER: purity per-mille (999 = fine, 925 = sterling)
+  purityPermille Int?
+  /// CASH/OTHER: fixed value the user enters, in the valuation currency (JOD)
+  amount         Decimal?  @db.Decimal(14, 2)
+  notes          String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  debtRepayment DebtPayment?
+
+  @@index([userId])
+}
