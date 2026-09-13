@@ -47,6 +47,12 @@ export class AuthService {
     return { ...safe, emailVerified: !!user.emailVerifiedAt };
   }
 
+  private async sessionUser(user: User) {
+    const membership = await this.prisma.householdMember.findUnique({ where: { userId: user.id } });
+    if (!membership) throw new UnauthorizedException('This account no longer has household access');
+    return { ...this.sanitize(user), householdRole: membership.role };
+  }
+
   private async issueTokens(user: User): Promise<TokenPair> {
     const payload: JwtPayload = { sub: user.id, email: user.email };
     const accessTtl = (process.env.JWT_ACCESS_TTL ??
@@ -71,6 +77,13 @@ export class AuthService {
     const existing = await this.prisma.user.findUnique({ where: { email } });
     if (existing) throw new ConflictException('Email already registered');
 
+    const invitation = dto.invitationToken
+      ? await this.prisma.householdInvitation.findUnique({ where: { token: dto.invitationToken } })
+      : null;
+    if (dto.invitationToken && (!invitation || invitation.acceptedAt || invitation.expiresAt < new Date() || invitation.email !== email)) {
+      throw new BadRequestException('Invalid, expired, or mismatched household invitation');
+    }
+
     const user = await this.prisma.user.create({
       data: {
         email,
@@ -81,10 +94,20 @@ export class AuthService {
         settings: { create: {} },
       },
     });
+    if (invitation) {
+      await this.prisma.$transaction([
+        this.prisma.householdMember.create({ data: { householdId: invitation.householdId, userId: user.id, role: 'REQUESTER' } }),
+        this.prisma.householdInvitation.update({ where: { id: invitation.id }, data: { acceptedAt: new Date() } }),
+      ]);
+    } else {
+      await this.prisma.household.create({
+        data: { name: `${user.name}'s household`, members: { create: { userId: user.id, role: 'OWNER' } } },
+      });
+    }
     this.mail.sendVerificationEmail(user.email, user.verifyToken!);
 
     const tokens = await this.issueTokens(user);
-    return { user: this.sanitize(user), ...tokens };
+    return { user: await this.sessionUser(user), ...tokens };
   }
 
   async login(dto: LoginDto) {
@@ -102,7 +125,7 @@ export class AuthService {
     if (!ok) throw new UnauthorizedException('Invalid email or password');
 
     const tokens = await this.issueTokens(user);
-    return { user: this.sanitize(user), ...tokens };
+    return { user: await this.sessionUser(user), ...tokens };
   }
 
   /**
@@ -129,9 +152,12 @@ export class AuthService {
           settings: { create: {} },
         },
       });
+      await this.prisma.household.create({
+        data: { name: `${user.name}'s household`, members: { create: { userId: user.id, role: 'OWNER' } } },
+      });
     }
     const tokens = await this.issueTokens(user);
-    return { user: this.sanitize(user), ...tokens };
+    return { user: await this.sessionUser(user), ...tokens };
   }
 
   async refresh(refreshToken: string | undefined) {
@@ -150,7 +176,7 @@ export class AuthService {
     if (!user) throw new UnauthorizedException('User no longer exists');
 
     const tokens = await this.issueTokens(user);
-    return { user: this.sanitize(user), ...tokens };
+    return { user: await this.sessionUser(user), ...tokens };
   }
 
   async verifyEmail(token: string) {
@@ -260,11 +286,12 @@ export class AuthService {
   async me(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: { settings: true },
+      include: { settings: true, householdMembership: true },
     });
     if (!user) throw new UnauthorizedException();
-    const { settings, ...rest } = user;
-    return { ...this.sanitize(rest as User), settings };
+    const { settings, householdMembership, ...rest } = user;
+    if (!householdMembership) throw new UnauthorizedException('This account no longer has household access');
+    return { ...this.sanitize(rest as User), settings, householdRole: householdMembership.role };
   }
 
   async updateProfile(userId: string, dto: UpdateProfileDto) {

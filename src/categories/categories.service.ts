@@ -11,9 +11,13 @@ import { CreateCategoryDto, UpdateCategoryDto } from './dto/category.dto';
 export class CategoriesService {
   constructor(private prisma: PrismaService) {}
 
-  list(userId: string) {
+  async list(userId: string) {
+    const member = await this.prisma.householdMember.findUnique({ where: { userId } });
+    const owner = member?.role === 'REQUESTER'
+      ? await this.prisma.householdMember.findFirst({ where: { householdId: member.householdId, role: 'OWNER' } })
+      : null;
     return this.prisma.category.findMany({
-      where: { OR: [{ isDefault: true, userId: null }, { userId }] },
+      where: { OR: [{ isDefault: true, userId: null }, { userId: owner?.userId ?? userId }] },
       orderBy: [{ isDefault: 'desc' }, { name: 'asc' }],
     });
   }

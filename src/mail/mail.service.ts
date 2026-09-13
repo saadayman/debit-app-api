@@ -104,4 +104,15 @@ export class MailService {
       `[RESET PASSWORD] to=${email} link=${this.webOrigin()}/reset-password?token=${token}`,
     );
   }
+
+  sendHouseholdInvitation(email: string, token: string) {
+    const link = `${this.webOrigin()}/register?invitation=${token}`;
+    this.logger.log(`[HOUSEHOLD INVITATION] to=${email} link=${link}`);
+    void this.sendMail({
+      to: email,
+      subject: 'You have been invited to a household shopping list',
+      text: `Create your restricted request account: ${link}`,
+      html: `<p>You have been invited to a household shopping list.</p><p><a href="${link}">Create your request account</a></p>`,
+    });
+  }
 }

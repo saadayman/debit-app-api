@@ -33,6 +33,9 @@ const recurring_module_1 = require("./recurring/recurring.module");
 const reports_module_1 = require("./reports/reports.module");
 const savings_module_1 = require("./savings/savings.module");
 const settings_module_1 = require("./settings/settings.module");
+const shopping_requests_module_1 = require("./shopping-requests/shopping-requests.module");
+const households_module_1 = require("./households/households.module");
+const requester_access_guard_1 = require("./auth/guards/requester-access.guard");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -46,6 +49,8 @@ exports.AppModule = AppModule = __decorate([
             prices_module_1.PricesModule,
             auth_module_1.AuthModule,
             settings_module_1.SettingsModule,
+            shopping_requests_module_1.ShoppingRequestsModule,
+            households_module_1.HouseholdsModule,
             categories_module_1.CategoriesModule,
             jobs_module_1.JobsModule,
             income_module_1.IncomeModule,
@@ -63,7 +68,10 @@ exports.AppModule = AppModule = __decorate([
             reports_module_1.ReportsModule,
             ai_module_1.AiModule,
         ],
-        providers: [{ provide: core_1.APP_GUARD, useClass: jwt_auth_guard_1.JwtAuthGuard }],
+        providers: [
+            { provide: core_1.APP_GUARD, useClass: jwt_auth_guard_1.JwtAuthGuard },
+            { provide: core_1.APP_GUARD, useClass: requester_access_guard_1.RequesterAccessGuard },
+        ],
     })
 ], AppModule);
 //# sourceMappingURL=app.module.js.map

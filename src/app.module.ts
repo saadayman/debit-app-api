@@ -24,6 +24,9 @@ import { RecurringModule } from './recurring/recurring.module';
 import { ReportsModule } from './reports/reports.module';
 import { SavingsModule } from './savings/savings.module';
 import { SettingsModule } from './settings/settings.module';
+import { ShoppingRequestsModule } from './shopping-requests/shopping-requests.module';
+import { HouseholdsModule } from './households/households.module';
+import { RequesterAccessGuard } from './auth/guards/requester-access.guard';
 
 @Module({
   imports: [
@@ -34,6 +37,8 @@ import { SettingsModule } from './settings/settings.module';
     PricesModule,
     AuthModule,
     SettingsModule,
+    ShoppingRequestsModule,
+    HouseholdsModule,
     CategoriesModule,
     JobsModule,
     IncomeModule,
@@ -51,6 +56,9 @@ import { SettingsModule } from './settings/settings.module';
     ReportsModule,
     AiModule,
   ],
-  providers: [{ provide: APP_GUARD, useClass: JwtAuthGuard }],
+  providers: [
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: RequesterAccessGuard },
+  ],
 })
 export class AppModule {}

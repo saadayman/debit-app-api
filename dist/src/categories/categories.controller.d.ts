@@ -4,7 +4,7 @@ import { CreateCategoryDto, UpdateCategoryDto } from './dto/category.dto';
 export declare class CategoriesController {
     private categories;
     constructor(categories: CategoriesService);
-    list(user: AuthUser): import("@prisma/client").Prisma.PrismaPromise<{
+    list(user: AuthUser): Promise<{
         id: string;
         name: string;
         nameAr: string | null;

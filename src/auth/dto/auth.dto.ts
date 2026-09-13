@@ -20,6 +20,10 @@ export class RegisterDto {
   @MinLength(8)
   @MaxLength(72)
   password: string;
+
+  @IsOptional()
+  @IsString()
+  invitationToken?: string;
 }
 
 export class LoginDto {

@@ -74,6 +74,17 @@ enum DriveType {
   ODOMETER_READING
 }
 
+enum ShoppingRequestStatus {
+  PENDING
+  PURCHASED
+  REJECTED
+}
+
+enum HouseholdRole {
+  OWNER
+  REQUESTER
+}
+
 model User {
   id                  String       @id @default(cuid())
   email               String       @unique
@@ -96,6 +107,9 @@ model User {
   installments      Installment[]
   recurringPayments RecurringPayment[]
   budgets           Budget[]
+  shoppingRequests  ShoppingRequest[]
+  householdMembership HouseholdMember?
+  sentHouseholdInvitations HouseholdInvitation[] @relation("InvitationSender")
   savingsAssets     SavingsAsset[]
   jobs              Job[]
   aiIntegration     AiIntegration?
@@ -288,6 +302,7 @@ model Category {
   expenses          Expense[]
   recurringPayments RecurringPayment[]
   budgets           Budget[]
+  shoppingRequests  ShoppingRequest[]
 
   @@index([userId])
 }
@@ -339,10 +354,75 @@ model Expense {
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
 
+  shoppingRequest ShoppingRequest?
+
   @@index([userId, date])
   @@index([userId, categoryId])
   @@index([userId, salaryIncomeId])
   @@index([userId, installmentId])
+}
+
+model ShoppingRequest {
+  id          String                @id @default(cuid())
+  userId      String
+  user        User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  quantity    String?
+  notes       String?
+  categoryId  String
+  category    Category              @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  status      ShoppingRequestStatus @default(PENDING)
+  expenseId   String?               @unique
+  expense     Expense?              @relation(fields: [expenseId], references: [id], onDelete: SetNull)
+  resolvedAt  DateTime?
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  householdId String
+  household   Household             @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([userId, categoryId])
+  @@index([householdId, status])
+}
+
+model Household {
+  id          String                @id @default(cuid())
+  name        String
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+  members     HouseholdMember[]
+  invitations HouseholdInvitation[]
+  requests    ShoppingRequest[]
+}
+
+model HouseholdMember {
+  id          String        @id @default(cuid())
+  householdId String
+  household   Household     @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  userId      String        @unique
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        HouseholdRole
+  createdAt   DateTime      @default(now())
+
+  @@index([householdId, role])
+}
+
+model HouseholdInvitation {
+  id          String        @id @default(cuid())
+  householdId String
+  household   Household     @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  email       String
+  role        HouseholdRole @default(REQUESTER)
+  token       String        @unique
+  invitedById String
+  invitedBy   User          @relation("InvitationSender", fields: [invitedById], references: [id], onDelete: Cascade)
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime      @default(now())
+
+  @@index([householdId])
+  @@index([email])
 }
 
 model Debt {

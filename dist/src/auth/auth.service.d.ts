@@ -12,11 +12,13 @@ export declare class AuthService {
     private mail;
     constructor(prisma: PrismaService, jwt: JwtService, mail: MailService);
     private sanitize;
+    private sessionUser;
     private issueTokens;
     register(dto: RegisterDto): Promise<{
         accessToken: string;
         refreshToken: string;
         user: {
+            householdRole: import("@prisma/client").$Enums.HouseholdRole;
             emailVerified: boolean;
             id: string;
             name: string;
@@ -32,6 +34,7 @@ export declare class AuthService {
         accessToken: string;
         refreshToken: string;
         user: {
+            householdRole: import("@prisma/client").$Enums.HouseholdRole;
             emailVerified: boolean;
             id: string;
             name: string;
@@ -52,6 +55,7 @@ export declare class AuthService {
         accessToken: string;
         refreshToken: string;
         user: {
+            householdRole: import("@prisma/client").$Enums.HouseholdRole;
             emailVerified: boolean;
             id: string;
             name: string;
@@ -67,6 +71,7 @@ export declare class AuthService {
         accessToken: string;
         refreshToken: string;
         user: {
+            householdRole: import("@prisma/client").$Enums.HouseholdRole;
             emailVerified: boolean;
             id: string;
             name: string;
@@ -114,6 +119,7 @@ export declare class AuthService {
             monthlyReportEmail: boolean;
             monthlyReportDay: number;
         } | null;
+        householdRole: import("@prisma/client").$Enums.HouseholdRole;
         emailVerified: boolean;
         id: string;
         name: string;

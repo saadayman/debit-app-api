@@ -20,4 +20,5 @@ export declare class MailService {
     private devFallback;
     sendVerificationEmail(email: string, token: string): void;
     sendPasswordResetEmail(email: string, token: string): void;
+    sendHouseholdInvitation(email: string, token: string): void;
 }

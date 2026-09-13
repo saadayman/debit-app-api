@@ -9,6 +9,7 @@ export declare class AuthController {
     register(dto: RegisterDto, res: Response): Promise<{
         accessToken: string;
         user: {
+            householdRole: import("@prisma/client").$Enums.HouseholdRole;
             emailVerified: boolean;
             id: string;
             name: string;
@@ -23,6 +24,7 @@ export declare class AuthController {
     login(dto: LoginDto, res: Response): Promise<{
         accessToken: string;
         user: {
+            householdRole: import("@prisma/client").$Enums.HouseholdRole;
             emailVerified: boolean;
             id: string;
             name: string;
@@ -37,6 +39,7 @@ export declare class AuthController {
     refresh(req: Request, res: Response): Promise<{
         accessToken: string;
         user: {
+            householdRole: import("@prisma/client").$Enums.HouseholdRole;
             emailVerified: boolean;
             id: string;
             name: string;
@@ -87,6 +90,7 @@ export declare class AuthController {
             monthlyReportEmail: boolean;
             monthlyReportDay: number;
         } | null;
+        householdRole: import("@prisma/client").$Enums.HouseholdRole;
         emailVerified: boolean;
         id: string;
         name: string;
